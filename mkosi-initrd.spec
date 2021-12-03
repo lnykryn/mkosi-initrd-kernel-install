@@ -3,7 +3,7 @@
 
 Name:    mkosi-initrd
 Version: 0
-Release: 1%{?dist}.%{shortcommit}
+Release: 2%{?dist}.%{shortcommit}
 Summary: Create initrd with mkosi
 
 License: Public Domain
@@ -14,6 +14,7 @@ Requires: mkosi >= 12
 Requires: zstd
 Requires: cpio
 Requires: sed
+Requires: python3-pyxattr
 
 BuildRequires: /usr/bin/pathfix.py
 
@@ -34,5 +35,8 @@ install -Dm0755 -t %{buildroot}%{_prefix}/lib/mkosi-initrd/ mkosi.finalize
 %{_prefix}/lib/mkosi-initrd/
 
 %changelog
+* Fri Dec 03 2021 Lukas Nykryn <lnykryn@redhat.com> - 0-2.2666ca9
+- add dependency to python3-pyxattr
+
 * Fri Dec 03 2021 Lukas Nykryn <lnykryn@redhat.com> - 0-1.2666ca9
 - new release
