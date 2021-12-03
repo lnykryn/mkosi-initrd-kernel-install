@@ -1,0 +1,68 @@
+#!/bin/bash
+
+export LANG=C
+
+COMMAND="$1"
+KERNEL_VERSION="$2"
+BOOT_DIR_ABS="$3"
+KERNEL_IMAGE="$4"
+
+if [[ ${KERNEL_INSTALL_MACHINE_ID+x} ]]; then
+    MACHINE_ID=$KERNEL_INSTALL_MACHINE_ID
+elif [[ -f /etc/machine-id ]] ; then
+    read -r MACHINE_ID < /etc/machine-id
+fi
+
+if ! [[ $MACHINE_ID ]]; then
+    exit 0
+fi
+
+BLS_DIR="/boot/loader/entries"
+BLS_ID="${MACHINE_ID}-${KERNEL_VERSION}-mkosi.conf"
+LOADER_ENTRY="${BLS_DIR}/${BLS_ID}"
+
+WITH_DRACUT=no
+[ -x /usr/lib/kernel/install.d/50-dracut.install ] && WITH_DRACUT=yes
+
+if [[ -d "$BOOT_DIR_ABS" ]]; then
+    INITRD="initrd"
+    #if dracut is used let's not compete, we would have to copy kernel,....
+    if [ $WITH_DRACUT = "yes" ]; then
+        #FIXME
+        exit 0
+    fi
+else
+    BOOT_DIR_ABS="/boot"
+    INITRD="initramfs-${KERNEL_VERSION}.img"
+    if [ $WITH_DRACUT = "yes" ]; then
+        #looks like we also use dracut, so let's create an additional entry
+        INITRD="mkosi-initrd-${KERNEL_VERSION}.img"
+    fi
+fi
+
+case "$COMMAND" in
+    add)
+        BUILD_DIR=$(mktemp -d -p /var/tmp)
+        pushd "$BUILD_DIR" || exit 1
+        dnf download "kernel-core-$KERNEL_VERSION"
+        cp /usr/lib/mkosi-initrd/fedora.mkosi /usr/lib/mkosi-initrd/mkosi.finalize ./
+        mkosi --default fedora.mkosi --finalize-script=mkosi.finalize  -f --image-version="$KERNEL_VERSION" --environment=KERNEL_VERSION="$KERNEL_VERSION"
+        mv "mkosi.output/initrd_${KERNEL_VERSION}.cpio.zstd"  "$BOOT_DIR_ABS/$INITRD"
+        rm -rf "$BUILD_DIR"
+        popd || :
+
+        if [ $WITH_DRACUT = "yes" ]; then
+            if [ "${BOOT_DIR_ABS}" = "/boot" ]; then
+                cp -aT "${BLS_DIR}/${MACHINE_ID}-${KERNEL_VERSION}.conf" "$LOADER_ENTRY"
+                sed -i "s#\(^title.*\)#\1 - mkosi#" "$LOADER_ENTRY"
+                sed -i "s#^initrd.*#initrd\t/$INITRD#" "$LOADER_ENTRY"
+                grub2-editenv - set "saved_entry=${BLS_ID}"
+            fi      
+        fi
+        ;;
+    remove)
+        [ -e "$LOADER_ENTRY" ] && rm -- "$LOADER_ENTRY"
+        rm -f -- "$BOOT_DIR_ABS/$INITRD"
+        ;;
+esac
+exit 0
